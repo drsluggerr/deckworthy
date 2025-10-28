@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: deckworthy
+  namespace: deckworthy
+  labels:
+    app: deckworthy
+  annotations:
+    # Uncomment for cert-manager SSL
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Uncomment for Traefik (k3s default)
+    # traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    # traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  # Uncomment and configure your domain
+  # tls:
+  # - hosts:
+  #   - deckworthy.yourdomain.com
+  #   secretName: deckworthy-tls
+
+  rules:
+  # Replace with your domain or use nip.io for testing
+  - host: deckworthy.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: deckworthy
+            port:
+              number: 80

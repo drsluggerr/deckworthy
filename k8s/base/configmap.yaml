@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deckworthy-config
+  namespace: deckworthy
+  labels:
+    app: deckworthy
+data:
+  # Application settings
+  NODE_ENV: "production"
+  PORT: "3000"
+
+  # Database path (mounted volume)
+  DATABASE_PATH: "/app/data/deckworthy.db"
+
+  # CORS settings (update with your domain)
+  CORS_ORIGINS: "http://localhost:3000"
+
+  # Sync schedules (cron format)
+  SYNC_PRICES_SCHEDULE: "0 */6 * * *"      # Every 6 hours
+  SYNC_PROTONDB_SCHEDULE: "0 2 * * *"      # Daily at 2am
+  SYNC_GAMES_SCHEDULE: "0 3 * * 0"         # Weekly on Sunday at 3am

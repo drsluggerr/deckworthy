@@ -57,3 +57,27 @@ coverage/
 .pid
 .seed
 .pid.lock
+
+# Kubernetes secrets (never commit secrets!)
+k8s/**/secret.yaml
+k8s/**/secrets.yaml
+**/secret-*.yaml
+
+# Terraform
+terraform/.terraform/
+terraform/**/.terraform/
+terraform/**/.terraform.lock.hcl
+terraform/**/*.tfstate
+terraform/**/*.tfstate.*
+terraform/**/*.tfstate.backup
+terraform/**/*.tfvars
+terraform/**/.terraform.tfstate.lock.info
+terraform/**/crash.log
+terraform/**/override.tf
+terraform/**/override.tf.json
+terraform/**/*_override.tf
+terraform/**/*_override.tf.json
+
+# Keep example files
+!terraform/**/*.tfvars.example
+!k8s/**/*.example

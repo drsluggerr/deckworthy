@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sync-prices
+  namespace: deckworthy
+  labels:
+    app: deckworthy
+    job: sync-prices
+spec:
+  # Every 6 hours (configurable)
+  schedule: "0 */6 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600  # 1 hour timeout
+      template:
+        metadata:
+          labels:
+            app: deckworthy
+            job: sync-prices
+        spec:
+          restartPolicy: OnFailure
+
+          securityContext:
+            fsGroup: 1001
+            runAsUser: 1001
+            runAsNonRoot: true
+
+          containers:
+          - name: sync-prices
+            image: deckworthy:latest
+            imagePullPolicy: IfNotPresent
+            command: ["node", "dist/jobs/sync-prices.js"]
+
+            envFrom:
+            - configMapRef:
+                name: deckworthy-config
+            - secretRef:
+                name: deckworthy-secrets
+
+            volumeMounts:
+            - name: data
+              mountPath: /app/data
+
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 300m
+                memory: 256Mi
+
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: deckworthy-data

@@ -110,11 +110,9 @@ export async function fetchAndStoreGames(
       const gameDetails = await fetchAppDetails(steamAppId);
 
       if (gameDetails) {
-        console.log(gameDetails)
         gamesRepo.upsertGame(gameDetails);
         results.success++;
       } else {
-        console.debug("Skipped")
         results.skipped++;
       }
 

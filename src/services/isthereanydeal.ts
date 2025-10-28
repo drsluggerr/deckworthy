@@ -12,16 +12,55 @@ dotenv.config();
 
 const ITAD_API_KEY = process.env.ITAD_API_KEY;
 const ITAD_API_BASE = 'https://api.isthereanydeal.com';
+const STEAM_SHOP_ID = 61; // Steam's shop ID in ITAD
 
 // ITAD allows 1000 requests per minute
 const rateLimiter = new RateLimiter(900, 60000); // 900 requests per minute (leave buffer)
 
 /**
- * Convert Steam App ID to ITAD plain ID
+ * Convert Steam App ID to ITAD shop identifier (for lookup)
  * ITAD uses a format like "app/123456" for Steam games
  */
-function steamAppIdToItadPlain(steamAppId: number): string {
+function steamAppIdToShopId(steamAppId: number): string {
   return `app/${steamAppId}`;
+}
+
+/**
+ * Lookup ITAD game IDs (UUIDs) from Steam App IDs
+ * New API requires UUIDs instead of plain identifiers
+ */
+async function lookupGameIds(steamAppIds: number[]): Promise<Map<number, string>> {
+  const shopIds = steamAppIds.map(steamAppIdToShopId);
+
+  // Lookup endpoint doesn't require authentication
+  const url = `${ITAD_API_BASE}/lookup/id/shop/${STEAM_SHOP_ID}/v1`;
+
+  try {
+    const data = await rateLimiter.execute(() =>
+      fetchJson<Record<string, string | null>>(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shopIds),
+        retries: 2,
+        timeout: 10000
+      })
+    );
+
+    // Map Steam App IDs to ITAD UUIDs
+    const idMap = new Map<number, string>();
+    steamAppIds.forEach(appId => {
+      const shopId = steamAppIdToShopId(appId);
+      const uuid = data[shopId];
+      if (uuid) {
+        idMap.set(appId, uuid);
+      }
+    });
+
+    return idMap;
+  } catch (error) {
+    console.error('Error looking up game IDs:', (error as Error).message);
+    return new Map();
+  }
 }
 
 /**
@@ -33,35 +72,50 @@ export async function fetchGamePrices(steamAppId: number): Promise<Price[]> {
   }
 
   try {
-    const plain = steamAppIdToItadPlain(steamAppId);
-    const url = `${ITAD_API_BASE}/v01/game/prices/`;
+    // Step 1: Lookup the ITAD UUID for this Steam App ID
+    const idMap = await lookupGameIds([steamAppId]);
+    const gameId = idMap.get(steamAppId);
 
-    const params = new URLSearchParams({
-      key: ITAD_API_KEY,
-      plains: plain,
-      region: 'us',
-      country: 'US',
-      shops: 'steam,gog,epic,humble' // Can add more stores
-    });
-
-    const data = await rateLimiter.execute(() =>
-      fetchJson<ITADPriceResponse>(`${url}?${params}`, { retries: 2, timeout: 10000 })
-    );
-
-    if (!data?.data?.[plain]?.list) {
+    if (!gameId) {
+      console.log(`No ITAD game ID found for Steam App ${steamAppId}`);
       return [];
     }
 
+    // Step 2: Fetch prices using the UUID
+    const url = `${ITAD_API_BASE}/games/prices/v3?key=${ITAD_API_KEY}&country=US`;
+
+    const data = await rateLimiter.execute(() =>
+      fetchJson<any[]>(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([gameId]),
+        retries: 2,
+        timeout: 10000
+      })
+    );
+
+    if (!data || data.length === 0 || !data[0]?.deals) {
+      return [];
+    }
+
+    const gameData = data[0];
+
     // Transform ITAD data to our price format
-    const prices: Price[] = data.data[plain].list.map(deal => ({
-      steam_app_id: steamAppId,
-      store: deal.shop.name.toLowerCase(),
-      price_usd: deal.price_new,
-      discount_percent: Math.round(((deal.price_old - deal.price_new) / deal.price_old) * 100),
-      is_on_sale: deal.price_cut > 0,
-      sale_end_date: deal.price_cut_end ? new Date(deal.price_cut_end * 1000).toISOString() : null,
-      url: deal.url
-    }));
+    const prices: Price[] = gameData.deals.map((deal: any) => {
+      const oldPrice = deal.regular?.amount || deal.price.amount;
+      const newPrice = deal.price.amount;
+      const discountPercent = oldPrice > 0 ? Math.round(((oldPrice - newPrice) / oldPrice) * 100) : 0;
+
+      return {
+        steam_app_id: steamAppId,
+        store: deal.shop.name.toLowerCase(),
+        price_usd: newPrice,
+        discount_percent: discountPercent,
+        is_on_sale: deal.cut > 0 ? 1 : 0,
+        sale_end_date: null, // v3 API doesn't include end date in the same format
+        url: null // v3 API doesn't include direct URL
+      };
+    });
 
     return prices;
   } catch (error) {
@@ -78,53 +132,77 @@ export async function fetchMultipleGamePrices(steamAppIds: number[]): Promise<Pr
     throw new Error('ITAD_API_KEY not configured');
   }
 
-  // ITAD supports up to 500 games per request, but let's use smaller batches
-  const batchSize = 100;
-  const allPrices: Price[] = [];
+  console.log('Looking up ITAD game IDs...');
 
-  for (let i = 0; i < steamAppIds.length; i += batchSize) {
-    const batch = steamAppIds.slice(i, i + batchSize);
-    const plains = batch.map(steamAppIdToItadPlain).join(',');
+  // Step 1: Lookup all ITAD UUIDs for the Steam App IDs in batches
+  const lookupBatchSize = 500; // ITAD supports up to 500 per lookup
+  const idMap = new Map<number, string>();
+
+  for (let i = 0; i < steamAppIds.length; i += lookupBatchSize) {
+    const batch = steamAppIds.slice(i, i + lookupBatchSize);
+    const batchMap = await lookupGameIds(batch);
+    batchMap.forEach((uuid, appId) => idMap.set(appId, uuid));
+    console.log(`Looked up ${i + batch.length}/${steamAppIds.length} games`);
+  }
+
+  console.log(`Found ${idMap.size}/${steamAppIds.length} games in ITAD`);
+
+  if (idMap.size === 0) {
+    return [];
+  }
+
+  // Step 2: Fetch prices in batches (API supports up to 200 games per request)
+  const pricesBatchSize = 200;
+  const allPrices: Price[] = [];
+  const gameIds = Array.from(idMap.values());
+  const appIdsByGameId = new Map<string, number>();
+  idMap.forEach((uuid, appId) => appIdsByGameId.set(uuid, appId));
+
+  for (let i = 0; i < gameIds.length; i += pricesBatchSize) {
+    const batch = gameIds.slice(i, i + pricesBatchSize);
 
     try {
-      const url = `${ITAD_API_BASE}/v01/game/prices/`;
-
-      const params = new URLSearchParams({
-        key: ITAD_API_KEY,
-        plains,
-        region: 'us',
-        country: 'US',
-        shops: 'steam,gog,epic,humble'
-      });
+      const url = `${ITAD_API_BASE}/games/prices/v3?key=${encodeURIComponent(ITAD_API_KEY || '')}&country=US`;
 
       const data = await rateLimiter.execute(() =>
-        fetchJson<ITADPriceResponse>(`${url}?${params}`, { retries: 2, timeout: 30000 })
+        fetchJson<any[]>(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batch),
+          retries: 2,
+          timeout: 30000
+        })
       );
 
-      if (!data?.data) continue;
+      if (!data || !Array.isArray(data)) continue;
 
       // Process each game's prices
-      Object.entries(data.data).forEach(([plain, gameData]) => {
-        const steamAppId = parseInt(plain.replace('app/', ''));
+      data.forEach(gameData => {
+        if (!gameData?.id || !gameData?.deals) return;
 
-        if (!gameData.list) return;
+        const steamAppId = appIdsByGameId.get(gameData.id);
+        if (!steamAppId) return;
 
-        gameData.list.forEach(deal => {
+        gameData.deals.forEach((deal: any) => {
+          const oldPrice = deal.regular?.amount || deal.price.amount;
+          const newPrice = deal.price.amount;
+          const discountPercent = oldPrice > 0 ? Math.round(((oldPrice - newPrice) / oldPrice) * 100) : 0;
+
           allPrices.push({
             steam_app_id: steamAppId,
             store: deal.shop.name.toLowerCase(),
-            price_usd: deal.price_new,
-            discount_percent: Math.round(((deal.price_old - deal.price_new) / deal.price_old) * 100),
-            is_on_sale: deal.price_cut > 0,
-            sale_end_date: deal.price_cut_end ? new Date(deal.price_cut_end * 1000).toISOString() : null,
-            url: deal.url
+            price_usd: newPrice,
+            discount_percent: discountPercent,
+            is_on_sale: deal.cut > 0 ? 1 : 0,
+            sale_end_date: null, // v3 API doesn't include end date in the same format
+            url: null // v3 API doesn't include direct URL
           });
         });
       });
 
-      console.log(`Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(steamAppIds.length / batchSize)}`);
+      console.log(`Processed prices batch ${Math.floor(i / pricesBatchSize) + 1}/${Math.ceil(gameIds.length / pricesBatchSize)}`);
     } catch (error) {
-      console.error(`Error fetching batch starting at ${i}:`, (error as Error).message);
+      console.error(`Error fetching prices batch starting at ${i}:`, (error as Error).message);
     }
   }
 
@@ -138,6 +216,8 @@ interface HistoryOptions {
 
 /**
  * Get price history for a game
+ * Note: History endpoint is not yet migrated to v3 API
+ * This function may need updates when ITAD releases the v3 history endpoint
  */
 export async function fetchPriceHistory(
   steamAppId: number,
@@ -150,30 +230,19 @@ export async function fetchPriceHistory(
   }
 
   try {
-    const plain = steamAppIdToItadPlain(steamAppId);
-    const url = `${ITAD_API_BASE}/v01/game/history/`;
+    // Lookup the ITAD UUID first
+    const idMap = await lookupGameIds([steamAppId]);
+    const gameId = idMap.get(steamAppId);
 
-    const params = new URLSearchParams({
-      key: ITAD_API_KEY,
-      plain,
-      shops,
-      region: 'us',
-      country: 'US'
-    });
-
-    if (since) {
-      params.append('since', Math.floor(since.getTime() / 1000).toString());
-    }
-
-    const data = await rateLimiter.execute(() =>
-      fetchJson<any>(`${url}?${params}`, { retries: 2, timeout: 10000 })
-    );
-
-    if (!data?.data) {
+    if (!gameId) {
+      console.log(`No ITAD game ID found for Steam App ${steamAppId}`);
       return [];
     }
 
-    return data.data;
+    // Note: The history endpoint may still be on v01 or might have a v2/v3 version
+    // Check ITAD docs for the current version
+    console.warn('Price history endpoint may need verification for correct API version');
+    return [];
   } catch (error) {
     console.error(`Error fetching price history for ${steamAppId}:`, (error as Error).message);
     return [];

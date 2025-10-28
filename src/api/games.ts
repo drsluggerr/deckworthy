@@ -33,7 +33,7 @@ router.get('/', (req: Request, res: Response): void => {
       minPrice: min_price ? parseFloat(min_price) : null,
       maxPrice: max_price ? parseFloat(max_price) : null,
       minDiscount: min_discount ? parseInt(min_discount) : null,
-      onSale: on_sale === 'true',
+      onSale: on_sale === 'true' ? true : null,
       search: search || null
     };
 

@@ -1,0 +1,40 @@
+meta {
+  name: Get All Games
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{localhost3000}}/games?page=1&limit=50
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 50
+  ~sort_by: name
+  ~sort_order: asc
+  ~search: 
+  ~proton_tier: 
+  ~min_price: 
+  ~max_price: 
+  ~min_discount: 
+  ~on_sale: 
+}
+
+docs {
+  Get all games with optional filtering, sorting, and pagination
+  
+  Query Parameters:
+  - page: Page number (default: 1)
+  - limit: Items per page (default: 50, max: 100)
+  - sort_by: Sort column (name, release_date, min_price, max_discount, proton_score)
+  - sort_order: asc or desc
+  - search: Search by game name
+  - proton_tier: Filter by ProtonDB tier (platinum, gold, silver, bronze, borked)
+  - min_price: Minimum price filter
+  - max_price: Maximum price filter
+  - min_discount: Minimum discount percentage
+  - on_sale: Filter games on sale (true)
+}

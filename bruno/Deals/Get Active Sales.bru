@@ -1,0 +1,15 @@
+meta {
+  name: Get Active Sales
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{localhost3000}}/deals/active-sales
+  body: none
+  auth: none
+}
+
+docs {
+  Get all currently active sales across all tracked stores
+}

@@ -187,7 +187,7 @@ export class GamesRepository {
       publishers: JSON.stringify(game.publishers || []),
       genres: JSON.stringify(game.genres || []),
       tags: JSON.stringify(game.tags || []),
-      isFree: game.is_free || false
+      isFree: game.is_free ? 1 : 0
     });
   }
 

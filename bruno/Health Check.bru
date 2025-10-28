@@ -1,0 +1,15 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{localhost3000}}/health
+  body: none
+  auth: none
+}
+
+docs {
+  Check if the server is running and healthy
+}

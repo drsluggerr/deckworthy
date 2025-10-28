@@ -1,0 +1,24 @@
+meta {
+  name: Get Price History
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{localhost3000}}/games/10/price-history?days=90
+  body: none
+  auth: none
+}
+
+params:query {
+  days: 90
+  ~store: 
+}
+
+docs {
+  Get price history for a game
+  
+  Query Parameters:
+  - days: Number of days to look back (default: 90)
+  - store: Filter by store name (optional)
+}

@@ -85,7 +85,7 @@ export class PricesRepository {
       store: price.store,
       priceUsd: price.price_usd,
       discountPercent: price.discount_percent || 0,
-      isOnSale: price.is_on_sale || false,
+      isOnSale: price.is_on_sale ? 1 : 0,
       saleEndDate: price.sale_end_date || null,
       url: price.url || null
     });
@@ -119,7 +119,7 @@ export class PricesRepository {
       store: price.store,
       priceUsd: price.price_usd,
       discountPercent: price.discount_percent || 0,
-      isOnSale: price.is_on_sale || false,
+      isOnSale: price.is_on_sale ? 1 : 0,
       saleEndDate: price.sale_end_date || null,
       url: price.url || null
     });

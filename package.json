@@ -1,0 +1,47 @@
+{
+  "name": "deckworthy",
+  "version": "1.0.0",
+  "description": "Game compatibility and pricing aggregator for Steam Deck users",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "init-db": "tsx src/db/init.ts",
+    "sync-games": "tsx src/jobs/sync-games.ts",
+    "sync-protondb": "tsx src/jobs/sync-protondb.ts",
+    "sync-prices": "tsx src/jobs/sync-prices.ts",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "steam-deck",
+    "protondb",
+    "game-prices",
+    "gaming"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "@types/node-cron": "^3.0.11",
+    "nodemon": "^3.1.0",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

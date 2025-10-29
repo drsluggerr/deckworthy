@@ -52,6 +52,8 @@ temp/
 # Testing
 coverage/
 .nyc_output/
+*.lcov
+.jest-cache/
 
 # Runtime
 .pid
